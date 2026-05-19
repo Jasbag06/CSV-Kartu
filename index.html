@@ -640,10 +640,13 @@ let filterFn='all',sortKey='newest';
 
 // ── Cloud Sync (JSONBin) ──────────────────────────────────────────────────────
 const MASTER_KEY='$2a$10$vfYxqqqL6qxESTd45jDene2D6FD1jlCz2EwOJYpWJMjLau6fo0sI6';
-const BIN_NAME='card-tracker-jason';
-let binId=null;
-let syncStatus='idle'; // idle | syncing | ok | error
+const BIN_ID='6a0c16456877513b27973e51';
+let syncStatus='idle';
 let syncTimer=null;
+
+// Store binId in localStorage for consistency
+localStorage.setItem('ct_binId', BIN_ID);
+let binId=BIN_ID;
 
 function setSyncIndicator(status,msg=''){
   const el=document.getElementById('sync-indicator');
@@ -687,32 +690,26 @@ async function createBin(data){
 }
 
 async function loadFromCloud(){
-  setSyncIndicator('syncing','Memuat data...');
+  setSyncIndicator('syncing','Memuat...');
   try{
-    // Try to get binId from localStorage first
-    const localBinId=localStorage.getItem('ct_binId');
-    if(localBinId){
-      binId=localBinId;
-      const res=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{
-        headers:{'X-MASTER-KEY':MASTER_KEY}
-      });
-      if(res.ok){
-        const json=await res.json();
-        const d=json.record;
-        if(d?.cards?.length){
-          if(d.kurs)kurs=d.kurs;
-          cards=d.cards;
-          if(d.funds?.length)funds=d.funds;
-          if(d.rmbTopups?.length)rmbTopups=d.rmbTopups;
-          if(d.theme)document.documentElement.setAttribute('data-theme',d.theme);
-          saveLocal();
-          setSyncIndicator('ok','Tersync');
-          return true;
-        }
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`,{
+      headers:{'X-MASTER-KEY':MASTER_KEY}
+    });
+    if(res.ok){
+      const json=await res.json();
+      const d=json.record;
+      if(d?.cards?.length){
+        if(d.kurs)kurs=d.kurs;
+        cards=d.cards;
+        if(d.funds?.length)funds=d.funds;
+        if(d.rmbTopups?.length)rmbTopups=d.rmbTopups;
+        if(d.theme)document.documentElement.setAttribute('data-theme',d.theme);
+        saveLocal();
+        setSyncIndicator('ok','Tersync ✓');
+        return true;
       }
     }
-    // No bin yet — use local data and create bin
-    setSyncIndicator('idle');
+    setSyncIndicator('error','Gagal load');
     return false;
   }catch(e){
     setSyncIndicator('error','Offline');
@@ -723,13 +720,8 @@ async function loadFromCloud(){
 async function saveToCloud(){
   setSyncIndicator('syncing');
   const data={kurs,cards:cards.map(c=>({...c,photo:''})),funds,rmbTopups,theme:document.documentElement.getAttribute('data-theme'),savedAt:new Date().toISOString()};
-  // Note: photos excluded from cloud (too large), stored only locally
   try{
-    if(!binId){
-      const ok=await createBin(data);
-      if(!ok){setSyncIndicator('error','Gagal sync');return;}
-    }
-    const res=await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-MASTER-KEY':MASTER_KEY},
       body:JSON.stringify(data)
